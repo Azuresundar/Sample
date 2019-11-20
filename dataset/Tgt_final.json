@@ -1,0 +1,27 @@
+{
+	"name": "Tgt_final",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AzureSqlDatabasetargetincre",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "PersonID",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "Name",
+				"type": "varchar"
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "Target_Table"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

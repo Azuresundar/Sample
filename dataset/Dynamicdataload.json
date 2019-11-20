@@ -1,0 +1,13 @@
+{
+	"name": "Dynamicdataload",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "DynamicTables",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}
