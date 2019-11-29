@@ -1,0 +1,575 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "DynamicAzure"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/incre')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "linkedinc",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [
+					{
+						"name": "PersonID",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "Name",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": "Target_Table"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/increloadtarget')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureSqlDatabasetarget",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [
+					{
+						"name": "TableName",
+						"type": "varchar"
+					},
+					{
+						"name": "WatermarkValue",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					}
+				],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": "watermarktable"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Blob to Azuresql')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "GetFilesToLoad",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "blobstoragesrc",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "AzureBlobStorageReadSettings",
+								"recursive": true
+							},
+							"formatSettings": {
+								"type": "DelimitedTextReadSettings"
+							}
+						}
+					},
+					{
+						"name": "ForEachFile",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "GetFilesToLoad",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('GetfilesToLoad').output.childitems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "LookupTableToLoad",
+									"type": "Lookup",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzureSqlSource",
+											"sqlReaderStoredProcedureName": "[[dbo].[usp_GetTabletoLoad]",
+											"storedProcedureParameters": {
+												"SourceFileName": {
+													"type": "String",
+													"value": {
+														"value": "@{item().name}",
+														"type": "Expression"
+													}
+												}
+											}
+										},
+										"dataset": {
+											"referenceName": "Dynamicdataload",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									}
+								},
+								{
+									"name": "DataLoadTarget",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "LookupTableToLoad",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "DelimitedTextSource",
+											"storeSettings": {
+												"type": "AzureBlobStorageReadSettings",
+												"recursive": true,
+												"wildcardFileName": {
+													"value": "@{item().name}",
+													"type": "Expression"
+												},
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "DelimitedTextReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzureSqlSink"
+										},
+										"enableStaging": false,
+										"enableSkipIncompatibleRow": true
+									},
+									"inputs": [
+										{
+											"referenceName": "blobstoragesrc",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Finaldynamic",
+											"type": "DatasetReference",
+											"parameters": {
+												"TableName": {
+													"value": "@{activity('LookupTableToLoad').output.firstrow.StagingTableName}",
+													"type": "Expression"
+												},
+												"SchemaName": {
+													"value": "@{activity('LookupTableToLoad').output.firstrow.StagingSchemaName}",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Incremental data load')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "oldwater",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource"
+							},
+							"dataset": {
+								"referenceName": "increloadtarget",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						}
+					},
+					{
+						"name": "Newwater",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": "select MAX(LastModifytime) as NewWatermarkvalue from data_source_table"
+							},
+							"dataset": {
+								"referenceName": "AzureSqlTablesrc",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						}
+					},
+					{
+						"name": "Copy Data1",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "oldwater",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Newwater",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": {
+									"value": "select PersonID,Name from data_source_table where LastModifytime > '@{activity('OldWater').output.firstRow.WatermarkValue}' and LastModifytime <= '@{activity('NewWater').output.firstRow.NewWatermarkvalue}'",
+									"type": "Expression"
+								}
+							},
+							"sink": {
+								"type": "AzureSqlSink"
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "AzureSqlTablesrc",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "incre",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					},
+					{
+						"name": "Stored Procedure1",
+						"type": "SqlServerStoredProcedure",
+						"dependsOn": [
+							{
+								"activity": "Copy Data1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"storedProcedureName": "[[dbo].[usp_write_watermark]",
+							"storedProcedureParameters": {
+								"LastModifiedtime": {
+									"value": {
+										"value": "@{activity('NewWater').output.firstRow.NewWatermarkvalue}",
+										"type": "Expression"
+									},
+									"type": "DateTime"
+								},
+								"TableName": {
+									"value": {
+										"value": "@{activity('OldWater').output.firstRow.TableName}",
+										"type": "Expression"
+									},
+									"type": "String"
+								}
+							}
+						},
+						"linkedServiceName": {
+							"referenceName": "Target",
+							"type": "LinkedServiceReference"
+						}
+					}
+				],
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/increloadtarget')]",
+				"[concat(variables('factoryId'), '/datasets/incre')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/demo')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy Data1",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Wait1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobStorageReadSettings",
+									"recursive": true,
+									"wildcardFileName": "*.*"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzureSqlSink"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "ORDERDATE",
+											"type": "String"
+										},
+										"sink": {
+											"name": "OrderDate",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "PURCHASEORDERNUMBER",
+											"type": "String"
+										},
+										"sink": {
+											"name": "PurchaseorderNumber",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"name": "AMOUNT",
+											"type": "String"
+										},
+										"sink": {
+											"name": "Amount",
+											"type": "Int32"
+										}
+									}
+								]
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "Demosrc",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "demoAzureSqlTable",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					},
+					{
+						"name": "Wait1",
+						"type": "Wait",
+						"dependsOn": [],
+						"userProperties": [],
+						"typeProperties": {
+							"waitTimeInSeconds": 10
+						}
+					}
+				],
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Salesdetails Data flow')]",
+			"type": "Microsoft.DataFactory/factories/dataflows",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "MappingDataFlow",
+				"typeProperties": {
+					"sources": [
+						{
+							"dataset": {
+								"referenceName": "Salesworkfllow",
+								"type": "DatasetReference"
+							},
+							"name": "salesdata",
+							"typeProperties": {}
+						}
+					],
+					"sinks": [
+						{
+							"dataset": {
+								"referenceName": "DelimitedText1",
+								"type": "DatasetReference"
+							},
+							"name": "sink1"
+						}
+					],
+					"transformations": [
+						{
+							"name": "SalesConditionalSplit"
+						},
+						{
+							"name": "DerivedColumn1"
+						}
+					],
+					"script": "\n\nsource(output(\n\t\t{Row ID} as string,\n\t\t{Order Priority} as string,\n\t\tDiscount as integer,\n\t\t{Unit Price} as integer,\n\t\t{Shipping Cost} as integer,\n\t\t{Customer ID} as string,\n\t\t{Customer Name} as string,\n\t\t{Ship Mode} as string,\n\t\t{Customer Segment} as string,\n\t\t{Product Category} as string,\n\t\t{Product Sub-Category} as string,\n\t\t{Product Container} as string,\n\t\t{Product Name} as string,\n\t\t{Product Base Margin} as string,\n\t\tCountry as string,\n\t\tRegion as string,\n\t\t{State or Province} as string,\n\t\tCity as string,\n\t\t{Postal Code} as string,\n\t\t{Order Date} as string,\n\t\t{Ship Date} as string,\n\t\tProfit as integer,\n\t\t{Quantity ordered new} as string,\n\t\tSales as integer,\n\t\t{Order ID} as integer\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false) ~> salesdata\nsalesdata split(like(City,'Prior Lake'),\n\tlike(City,'New York City'),\n\tdisjoint: true) ~> SalesConditionalSplit@(ColFlagstaff, ColDetroit)\nSalesConditionalSplit@ColFlagstaff derive(Sales1 = {Unit Price}*{Shipping Cost}) ~> DerivedColumn1\nDerivedColumn1 sink(input(\n\t\t{Row ID} as string,\n\t\t{Order Priority} as string,\n\t\tDiscount as string,\n\t\t{Unit Price} as string,\n\t\t{Shipping Cost} as string,\n\t\t{Customer ID} as string,\n\t\t{Customer Name} as string,\n\t\t{Ship Mode} as string,\n\t\t{Customer Segment} as string,\n\t\t{Product Category} as string,\n\t\t{Product Sub-Category} as string,\n\t\t{Product Container} as string,\n\t\t{Product Name} as string,\n\t\t{Product Base Margin} as string,\n\t\tCountry as string,\n\t\tRegion as string,\n\t\t{State or Province} as string,\n\t\tCity as string,\n\t\t{Postal Code} as string,\n\t\t{Order Date} as string,\n\t\t{Ship Date} as string,\n\t\tProfit as string,\n\t\t{Quantity ordered new} as string,\n\t\tSales as string,\n\t\t{Order ID} as string\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false) ~> sink1"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/pipeline1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Salesdetails Data flow",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "Salesdetails Data flow",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"salesdata": {},
+									"sink1": {}
+								}
+							},
+							"staging": {}
+						}
+					}
+				],
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/dataflows/Salesdetails Data flow')]"
+			]
+		}
+	]
+}

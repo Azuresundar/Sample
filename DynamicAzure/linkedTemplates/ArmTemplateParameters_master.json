@@ -1,0 +1,48 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"value": "DynamicAzure"
+		},
+		"Azdemo_connectionString": {
+			"value": ""
+		},
+		"AzureBlobStorage1_connectionString": {
+			"value": ""
+		},
+		"AzureSqlDatabasesrc_connectionString": {
+			"value": ""
+		},
+		"AzureSqlDatabasetarget_connectionString": {
+			"value": ""
+		},
+		"AzureSqlDatabasetargetincre_connectionString": {
+			"value": ""
+		},
+		"DynamicBlob_connectionString": {
+			"value": ""
+		},
+		"DynamicTables_connectionString": {
+			"value": ""
+		},
+		"SalesAzureBlobStorage_connectionString": {
+			"value": ""
+		},
+		"Target_connectionString": {
+			"value": ""
+		},
+		"demoblob_connectionString": {
+			"value": ""
+		},
+		"linkedinc_connectionString": {
+			"value": ""
+		},
+		"containerUri": {
+			"value": ""
+		},
+		"containerSasToken": {
+			"value": ""
+		}
+	}
+}
