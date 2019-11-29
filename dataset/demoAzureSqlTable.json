@@ -1,0 +1,31 @@
+{
+	"name": "demoAzureSqlTable",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "Azdemo",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "OrderDate",
+				"type": "varchar"
+			},
+			{
+				"name": "PurchaseorderNumber",
+				"type": "varchar"
+			},
+			{
+				"name": "Amount",
+				"type": "int",
+				"precision": 10
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "Sales_Caps"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}
